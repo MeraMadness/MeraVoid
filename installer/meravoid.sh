@@ -32,7 +32,7 @@ print_green "Welcome to the Void Linux for Gaming - Installer!"
 
 # Display current partitions
 print_green "Current partitions on all drives:"
-lsblk
+fdisk -l
 echo
 
 # Prompt for necessary inputs
@@ -97,11 +97,17 @@ mount -o noatime,compress=zstd,subvol=@snapshots ${DEVICE}2 /mnt/.snapshots
 mkdir -p /mnt/var/log
 mount -o noatime,compress=zstd,subvol=@var_log ${DEVICE}2 /mnt/var/log
 
+# Verify Btrfs mounts
+if ! mountpoint -q /mnt || ! mountpoint -q /mnt/home || ! mountpoint -q /mnt/.snapshots || ! mountpoint -q /mnt/var/log; then
+  print_red "Error: One or more Btrfs subvolumes failed to mount."
+  exit 1
+fi
+
 # Install base system
 print_green "Installing base system..."
 mkdir -p /mnt/boot/efi
 mount ${DEVICE}1 /mnt/boot/efi
-xbps-install -Sy -R https://alpha.de.repo.voidlinux.org/current -r /mnt base-system btrfs-progs
+xbps-install -Sy -r /mnt base-system btrfs-progs sudo nano git base-devel efibootmgr mtools dosfstools 
 
 # Configure fstab
 print_green "Configuring fstab..."
