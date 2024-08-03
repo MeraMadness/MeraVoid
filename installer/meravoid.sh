@@ -30,10 +30,6 @@ fi
 # Introduction and Welcome
 print_green "Welcome to the Void Linux for Gaming - Installer!"
 
-# Select mirrors
-print_green "Select the mirrors using xmirror"
-xmirror -l /usr/share/xmirror/mirrors.lst
-
 # Display current partitions
 print_green "Current partitions on all drives:"
 fdisk -l
@@ -58,14 +54,17 @@ if [ "$CONFIRM" != "yes" ]; then
   exit
 fi
 
-# Set up partitions using cfdisk
+# Set up partitions using sfdisk
 print_green "Setting up partitions..."
-cfdisk $DEVICE
+sfdisk $DEVICE <<EOF
+label: gpt
+size=512M, type=ef00
+size=, type=8300
+EOF
 
 # Format partitions
 print_green "Formatting partitions..."
 mkfs.fat -F32 ${DEVICE}1
-mkdir /mnt
 
 if [ "$ENCRYPT" == "yes" ]; then
   print_green "Setting up LUKS encryption..."
@@ -80,7 +79,6 @@ fi
 
 # Create Btrfs subvolumes
 print_green "Creating Btrfs subvolumes..."
-mkdir -p /mnt/{home,.snapshots}
 btrfs subvolume create /mnt/@
 btrfs subvolume create /mnt/@home
 btrfs subvolume create /mnt/@snapshots
@@ -89,11 +87,13 @@ umount /mnt
 
 # Remount with subvolumes
 print_green "Mounting subvolumes..."
-mount -o noatime,compress=zstd,subvol=@ ${DEVICE}2 /mnt
-mount -o noatime,compress=zstd,subvol=@home ${DEVICE}2 /mnt/home
-mount -o noatime,compress=zstd,subvol=@snapshots ${DEVICE}2 /mnt/.snapshots
+mkdir -p /mnt/{home,.snapshots}
+mount -o compress=zstd,noatime,space_cache=v2,subvol=@,discard=async ${DEVICE}2 /mnt
+mount -o compress=zstd,noatime,space_cache=v2,subvol=@home ${DEVICE}2 /mnt/home
+mount -o compress=zstd,noatime,space_cache=v2,subvol=@snapshots ${DEVICE}2 /mnt/.snapshots
 mkdir -p /mnt/var/log
-mount -o noatime,compress=zstd,subvol=@var_log ${DEVICE}2 /mnt/var/log
+mount -o compress=zstd,noatime,space_cache=v2,subvol=@var_log ${DEVICE}2 /var/log
+BTRFS_OPTS=compress=zstd,noatime,space_cache=v2,autodefrag
 
 # Verify Btrfs mounts
 if ! mountpoint -q /mnt || ! mountpoint -q /mnt/home || ! mountpoint -q /mnt/.snapshots || ! mountpoint -q /mnt/var/log; then
@@ -105,17 +105,20 @@ fi
 print_green "Installing base system..."
 mkdir -p /mnt/boot/efi
 mount ${DEVICE}1 /mnt/boot/efi
-xbps-install -Sy -r /mnt base-system btrfs-progs sudo nano git base-devel efibootmgr mtools dosfstools grub-x86_64-efi grub-btrfs
+print_green "Select the mirrors using xmirror"
+xmirror -l /usr/share/xmirror/mirrors.lst
+ARCH=x86_64
+XBPS_ARCH=$ARCH xbps-install -Sy -r /mnt base-system btrfs-progs sudo nano git base-devel efibootmgr mtools dosfstools grub-x86_64-efi grub-btrfs
 
 # Configure fstab
 print_green "Configuring fstab..."
 UUID=$(blkid -s UUID -o value ${DEVICE}2)
 BOOT_UUID=$(blkid -s UUID -o value ${DEVICE}1)
 cat <<EOF > /mnt/etc/fstab
-UUID=$UUID / btrfs rw,noatime,compress=zstd,subvol=@ 0 1
-UUID=$UUID /home btrfs rw,noatime,compress=zstd,subvol=@home 0 2
-UUID=$UUID /.snapshots btrfs rw,noatime,compress=zstd,subvol=@snapshots 0 2
-UUID=$UUID /var/log btrfs rw,noatime,compress=zstd,subvol=@var_log 0 2
+UUID=$UUID / btrfs $BTRFS_OPTS,subvol=@ 0 1
+UUID=$UUID /home btrfs $BTRFS_OPTS,subvol=@home 0 2
+UUID=$UUID /.snapshots btrfs $BTRFS_OPTS,subvol=@snapshots 0 2
+UUID=$UUID /var/log btrfs $BTRFS_OPTS,subvol=@var_log 0 2
 UUID=$BOOT_UUID /boot/efi vfat defaults,noatime 0 2
 EOF
 
