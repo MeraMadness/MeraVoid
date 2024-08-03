@@ -67,13 +67,13 @@ EOF
 
 # Format partitions
 print_green "Formatting partitions..."
-mkfs.fat -F32 ${DEVICE}1
+mkfs.fat -f -F32 ${DEVICE}1
 
 if [ "$ENCRYPT" == "yes" ]; then
   print_green "Setting up LUKS encryption..."
   cryptsetup luksFormat ${DEVICE}2
   cryptsetup open ${DEVICE}2 cryptroot
-  mkfs.btrfs /dev/mapper/cryptroot
+  mkfs.btrfs -f /dev/mapper/cryptroot
   mount /dev/mapper/cryptroot /mnt
 else
   mkfs.btrfs ${DEVICE}2
@@ -143,9 +143,7 @@ echo "en_US.UTF-8 UTF-8" > /mnt/etc/default/libc-locales
 
 # Install bootloader
 print_green "Installing bootloader..."
-mount --bind /dev /mnt/dev
-mount --bind /proc /mnt/proc
-mount --bind /sys /mnt/sys
+for dir in dev proc sys run; do mount --rbind /$dir /mnt/$dir; mount --make-rslave /mnt/$dir; done
 chroot /mnt xbps-reconfigure -fa
 chroot /mnt ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 chroot /mnt xbps-install -y grub-x86_64-efi grub-btrfs
