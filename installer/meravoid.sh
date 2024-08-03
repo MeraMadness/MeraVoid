@@ -30,6 +30,10 @@ fi
 # Introduction and Welcome
 print_green "Welcome to the Void Linux for Gaming - Installer!"
 
+# Select mirrors
+print_green "Select the mirrors using xmirror"
+xmirror -l /usr/share/xmirror/mirrors.lst
+
 # Display current partitions
 print_green "Current partitions on all drives:"
 fdisk -l
@@ -45,9 +49,6 @@ echo
 read -p "Enter the locale (e.g., en_US.UTF-8): " LOCALE
 read -p "Enter your timezone (e.g., Europe/Berlin): " TIMEZONE
 
-# Select mirrors
-print_green "Select the mirrors using xmirror"
-xmirror -l /usr/share/xmirror/mirrors.lst
 
 # Confirm the device to avoid data loss
 print_red "WARNING: This will delete all data on $DEVICE."
@@ -57,17 +58,14 @@ if [ "$CONFIRM" != "yes" ]; then
   exit
 fi
 
-# Set up partitions using sfdisk
+# Set up partitions using cfdisk
 print_green "Setting up partitions..."
-sfdisk $DEVICE <<EOF
-label: gpt
-,512M,U
-,,
-EOF
+cfdisk $DEVICE
 
 # Format partitions
 print_green "Formatting partitions..."
 mkfs.fat -F32 ${DEVICE}1
+mkdir /mnt
 
 if [ "$ENCRYPT" == "yes" ]; then
   print_green "Setting up LUKS encryption..."
