@@ -82,6 +82,7 @@ fi
 
 # Create Btrfs subvolumes
 print_green "Creating Btrfs subvolumes..."
+mkdir -p /mnt/{home,.snapshots}
 btrfs subvolume create /mnt/@
 btrfs subvolume create /mnt/@home
 btrfs subvolume create /mnt/@snapshots
@@ -91,9 +92,7 @@ umount /mnt
 # Remount with subvolumes
 print_green "Mounting subvolumes..."
 mount -o noatime,compress=zstd,subvol=@ ${DEVICE}2 /mnt
-mkdir -p /mnt/home
 mount -o noatime,compress=zstd,subvol=@home ${DEVICE}2 /mnt/home
-mkdir -p /mnt/.snapshots
 mount -o noatime,compress=zstd,subvol=@snapshots ${DEVICE}2 /mnt/.snapshots
 mkdir -p /mnt/var/log
 mount -o noatime,compress=zstd,subvol=@var_log ${DEVICE}2 /mnt/var/log
