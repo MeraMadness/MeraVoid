@@ -43,7 +43,7 @@ read -p "Enter the username: " USERNAME
 read -sp "Enter the password for $USERNAME: " PASSWORD
 echo 
 read -p "Enter the locale (e.g., en_US.UTF-8): " LOCALE
-read -p "Enter your timexone (e.g., Europe/Berlin): " TIMEZONE
+read -p "Enter your timezone (e.g., Europe/Berlin): " TIMEZONE
 
 # Select mirrors
 print_green "Select the mirrors using xmirror"
@@ -67,13 +67,13 @@ EOF
 
 # Format partitions
 print_green "Formatting partitions..."
-mkfs.fat -f -F32 ${DEVICE}1
+mkfs.fat -F32 ${DEVICE}1
 
 if [ "$ENCRYPT" == "yes" ]; then
   print_green "Setting up LUKS encryption..."
   cryptsetup luksFormat ${DEVICE}2
   cryptsetup open ${DEVICE}2 cryptroot
-  mkfs.btrfs -f /dev/mapper/cryptroot
+  mkfs.btrfs /dev/mapper/cryptroot
   mount /dev/mapper/cryptroot /mnt
 else
   mkfs.btrfs ${DEVICE}2
@@ -107,18 +107,18 @@ fi
 print_green "Installing base system..."
 mkdir -p /mnt/boot/efi
 mount ${DEVICE}1 /mnt/boot/efi
-xbps-install -Sy -r /mnt base-system btrfs-progs sudo nano git base-devel efibootmgr mtools dosfstools 
+xbps-install -Sy -r /mnt base-system btrfs-progs sudo nano git base-devel efibootmgr mtools dosfstools grub-x86_64-efi grub-btrfs
 
 # Configure fstab
 print_green "Configuring fstab..."
 UUID=$(blkid -s UUID -o value ${DEVICE}2)
 BOOT_UUID=$(blkid -s UUID -o value ${DEVICE}1)
 cat <<EOF > /mnt/etc/fstab
-UUID=$UUID / btrfs rw,noatime,compress=zstd,subvol=@ 0 0
-UUID=$UUID /home btrfs rw,noatime,compress=zstd,subvol=@home 0 0
-UUID=$UUID /.snapshots btrfs rw,noatime,compress=zstd,subvol=@snapshots 0 0
-UUID=$UUID /var/log btrfs rw,noatime,compress=zstd,subvol=@var_log 0 0
-UUID=$BOOT_UUID /boot/efi vfat defaults 0 0
+UUID=$UUID / btrfs rw,noatime,compress=zstd,subvol=@ 0 1
+UUID=$UUID /home btrfs rw,noatime,compress=zstd,subvol=@home 0 2
+UUID=$UUID /.snapshots btrfs rw,noatime,compress=zstd,subvol=@snapshots 0 2
+UUID=$UUID /var/log btrfs rw,noatime,compress=zstd,subvol=@var_log 0 2
+UUID=$BOOT_UUID /boot/efi vfat defaults,noatime 0 2
 EOF
 
 # Configure crypttab if encryption is enabled
@@ -138,22 +138,25 @@ EOF
 
 # Set up locale
 print_green "Setting up locale..."
-echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
-echo "en_US.UTF-8 UTF-8" > /mnt/etc/default/libc-locales
+echo "LANG=$LOCALE" > /mnt/etc/locale.conf
+echo "$LOCALE UTF-8" > /mnt/etc/default/libc-locales
+
+# Set up timezone
+print_green "Setting up timezone..."
+ln -sf /usr/share/zoneinfo/$TIMEZONE /mnt/etc/localtime
+chroot /mnt hwclock --systohc --utc
 
 # Install bootloader
 print_green "Installing bootloader..."
 for dir in dev proc sys run; do mount --rbind /$dir /mnt/$dir; mount --make-rslave /mnt/$dir; done
-chroot /mnt xbps-reconfigure -fa
-chroot /mnt ln -sf /usr/share/zoneinfo/UTC /etc/localtime
-chroot /mnt xbps-install -y grub-x86_64-efi grub-btrfs
 
 # Install GRUB
 if [ "$ENCRYPT" == "yes" ]; then
-  chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+  chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Void Linux"
   chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+  chroot /mnt xbps-reconfigure -fa
 else
-  chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+  chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Void Linux"
   chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 fi
 
@@ -174,23 +177,23 @@ select opt in "${options[@]}"
 do
   case $opt in
     "KDE")
-      /bin/bash /de/kde.sh /mnt $GPU
+      /bin/bash kde.sh /mnt $GPU
       break
       ;;
     "Gnome")
-      /bin/bash /de/gnome.sh /mnt $GPU
+      /bin/bash gnome.sh /mnt $GPU
       break
       ;;
     "Hyprland")
-      /bin/bash /wm/hyprland.sh /mnt $GPU
+      /bin/bash hyprland.sh /mnt $GPU
       break
       ;;
     "Sway")
-      /bin/bash /wm/sway.sh /mnt $GPU
+      /bin/bash sway.sh /mnt $GPU
       break
       ;;
     "XFCE4")
-      /bin/bash /de/xfce4.sh /mnt $GPU
+      /bin/bash xfce4.sh /mnt $GPU
       break
       ;;
     *) print_red "Invalid option $REPLY";;
