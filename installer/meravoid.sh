@@ -50,19 +50,20 @@ print_green "Select the mirrors using xmirror"
 xmirror -l /usr/share/xmirror/mirrors.lst
 
 # Confirm the device to avoid data loss
-print_green "WARNING: This will delete all data on $DEVICE."
+print_red "WARNING: This will delete all data on $DEVICE."
 read -p "Are you sure you want to continue? (yes/no): " CONFIRM
 if [ "$CONFIRM" != "yes" ]; then
   print_green "Installation aborted."
   exit
 fi
 
-# Set up partitions
+# Set up partitions using sfdisk
 print_green "Setting up partitions..."
-parted $DEVICE -- mklabel gpt
-parted $DEVICE -- mkpart ESP fat32 1MiB 512MiB
-parted $DEVICE -- set 1 boot on
-parted $DEVICE -- mkpart primary 512MiB 100%
+sfdisk $DEVICE <<EOF
+label: gpt
+,512M,U
+,,
+EOF
 
 # Format partitions
 print_green "Formatting partitions..."
